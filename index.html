@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMART POLYBOT — Live Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --green:#00ff88;--red:#ff3366;--yellow:#ffcc00;--blue:#00aaff;
+    --bg:#050a0e;--bg2:#0a1520;--bg3:#0f1e2e;--border:#1a3a5c;
+    --text:#c8e6ff;--dim:#4a7a9b;--white:#e8f4ff;
+  }
+  body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:13px;min-height:100vh;overflow-x:hidden}
+  
+  /* Header */
+  .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .logo{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;color:var(--white);letter-spacing:3px}
+  .logo span{color:var(--green)}
+  .subtitle{font-size:10px;color:var(--dim);letter-spacing:2px;margin-top:2px}
+  .live-badge{display:flex;align-items:center;gap:6px;background:#0a2010;border:1px solid var(--green);padding:4px 12px;border-radius:2px}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:0.3;box-shadow:none}}
+  .live-text{color:var(--green);font-size:11px;letter-spacing:2px;font-weight:700}
+
+  /* Targets */
+  .targets{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;overflow:hidden}
+  .target-label{color:var(--dim);font-size:10px;letter-spacing:1px}
+  .target-addr{color:var(--blue);font-size:11px}
+  .target-sep{color:var(--border)}
+  .scan-link{color:var(--dim);font-size:10px;text-decoration:none;border:1px solid var(--border);padding:2px 8px;border-radius:2px;transition:all .2s}
+  .scan-link:hover{color:var(--blue);border-color:var(--blue)}
+
+  /* Main Grid */
+  .main{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  @media(max-width:900px){.main{grid-template-columns:1fr 1fr}}
+  @media(max-width:600px){.main{grid-template-columns:1fr}}
+
+  /* Panels */
+  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:2px}
+  .panel-header{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .panel-title{font-size:10px;letter-spacing:2px;color:var(--dim);font-weight:700}
+  .panel-body{padding:14px}
+
+  /* Stats */
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+  .stat-box{background:var(--bg3);border:1px solid var(--border);padding:10px 12px;border-radius:2px}
+  .stat-label{font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:4px}
+  .stat-value{font-size:20px;font-weight:700;font-family:'Orbitron',sans-serif;color:var(--white)}
+  .stat-value.green{color:var(--green)}
+  .stat-value.red{color:var(--red)}
+  .stat-value.yellow{color:var(--yellow)}
+  .stat-value.blue{color:var(--blue)}
+  .stat-sub{font-size:10px;color:var(--dim);margin-top:2px}
+
+  /* PnL Chart */
+  .chart-wrap{position:relative;height:120px;margin-top:8px}
+  canvas{width:100%!important;height:100%!important}
+
+  /* Trade Feed */
+  .feed-wrap{grid-column:1/-1;background:var(--bg2);border:1px solid var(--border);border-radius:2px}
+  .feed-header{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .feed-title{font-size:10px;letter-spacing:2px;color:var(--dim)}
+  .feed-controls{display:flex;gap:8px}
+  .feed-btn{background:transparent;border:1px solid var(--border);color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:10px;padding:3px 10px;cursor:pointer;border-radius:2px;letter-spacing:1px}
+  .feed-btn.active{border-color:var(--green);color:var(--green);background:#0a2010}
+  .feed-body{padding:0;max-height:300px;overflow-y:auto}
+  .feed-body::-webkit-scrollbar{width:4px}
+  .feed-body::-webkit-scrollbar-track{background:var(--bg)}
+  .feed-body::-webkit-scrollbar-thumb{background:var(--border)}
+  .trade-row{padding:8px 14px;border-bottom:1px solid rgba(26,58,92,0.3);display:flex;align-items:flex-start;gap:12px;animation:fadeIn .3s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+  .trade-time{color:var(--dim);font-size:10px;white-space:nowrap;padding-top:2px}
+  .trade-type{font-size:10px;padding:2px 8px;border-radius:2px;letter-spacing:1px;white-space:nowrap}
+  .trade-type.buy{background:#0a2010;color:var(--green);border:1px solid #004d20}
+  .trade-type.sell{background:#1a0510;color:var(--red);border:1px solid #4d0015}
+  .trade-market{color:var(--text);font-size:11px;flex:1;line-height:1.5}
+  .trade-wallet{font-size:10px;color:var(--dim);margin-top:2px}
+  .trade-amount{color:var(--yellow);font-size:11px;font-weight:700;white-space:nowrap}
+  .trade-price{color:var(--blue);font-size:10px;white-space:nowrap}
+  .empty-feed{padding:40px;text-align:center;color:var(--dim)}
+
+  /* Wallet Cards */
+  .wallet-cards{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:700px){.wallet-cards{grid-template-columns:1fr}}
+  .wallet-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px}
+  .wcard-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+  .wcard-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:1px;flex-shrink:0}
+  .wcard-name{font-size:11px;letter-spacing:1px;color:var(--white);font-weight:700}
+  .wcard-addr{font-size:9px;color:var(--dim);font-family:'Share Tech Mono',monospace}
+  .wcard-body{padding:12px 14px}
+  .wcard-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(26,58,92,0.3)}
+  .wcard-row:last-child{border:none}
+  .wcard-label{font-size:10px;color:var(--dim)}
+  .wcard-val{font-size:10px;font-weight:700}
+  .wcard-val.green{color:var(--green)}
+  .wcard-val.red{color:var(--red)}
+  .wcard-val.blue{color:var(--blue)}
+  .wcard-val.yellow{color:var(--yellow)}
+
+  /* Bottom Bar */
+  .bottom-bar{background:var(--bg3);border-top:1px solid var(--border);padding:6px 20px;display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--dim);flex-wrap:wrap;gap:4px}
+  .node-info{display:flex;align-items:center;gap:12px}
+  .node-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1s infinite}
+  .clock{color:var(--yellow);font-family:'Orbitron',sans-serif;font-size:11px}
+
+  /* Risk Box */
+  .risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .risk-item{background:var(--bg3);border:1px solid var(--border);padding:8px 10px;border-radius:2px}
+  .risk-label{font-size:9px;color:var(--dim);letter-spacing:1px}
+  .risk-val{font-size:13px;color:var(--white);margin-top:2px}
+  .risk-active{border-color:var(--green)}
+  .risk-status{display:flex;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;background:#0a2010;border:1px solid #004d20;border-radius:2px}
+  .risk-status-text{color:var(--green);font-size:10px;letter-spacing:2px}
+
+  /* Loading */
+  .loading-spin{display:inline-block;animation:spin 1s linear infinite}
+  @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">SMART <span>POLY</span>BOT</div>
+    <div class="subtitle">— POLYMARKET LIVE TRADING MONITOR —</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <div class="live-text">LIVE</div>
+    </div>
+  </div>
+</div>
+
+<div class="targets">
+  <span class="target-label">TARGETS</span>
+  <span class="target-addr" id="t1">0xbddf…684</span>
+  <span class="target-sep">|</span>
+  <span class="target-addr" id="t2">0x9495…a27</span>
+  <span class="target-sep">|</span>
+  <span class="target-addr" id="t3">0x4924…782</span>
+  <a href="https://polymarket.com/leaderboard" target="_blank" class="scan-link">VIEW ON POLYMARKET ↗</a>
+</div>
+
+<div class="main">
+
+  <!-- Total PnL -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">PORTFOLIO OVERVIEW</span>
+      <span id="update-indicator" style="font-size:9px;color:var(--dim)">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">TOTAL P&L</div>
+          <div class="stat-value green" id="total-pnl">$0.00</div>
+          <div class="stat-sub" id="total-pnl-pct">+0.00%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">OPEN POSITIONS</div>
+          <div class="stat-value blue" id="total-positions">0</div>
+          <div class="stat-sub">across 3 wallets</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">TOTAL TRADES</div>
+          <div class="stat-value yellow" id="total-trades">0</div>
+          <div class="stat-sub" id="win-rate-display">0 WIN / 0 ALL</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">WIN RATE</div>
+          <div class="stat-value" id="win-rate-val">0%</div>
+          <div class="stat-sub">overall</div>
+        </div>
+      </div>
+      <div class="panel-title" style="margin-bottom:8px">LIVE P&L CURVE</div>
+      <div class="chart-wrap">
+        <canvas id="pnlChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bot Stats -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">BOT STATISTICS</span></div>
+    <div class="panel-body">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">COPIED</div>
+          <div class="stat-value green" id="stat-copied">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">SETTLED WIN</div>
+          <div class="stat-value green" id="stat-wins">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">SETTLED LOSS</div>
+          <div class="stat-value red" id="stat-losses">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">EXPOSURE TODAY</div>
+          <div class="stat-value yellow" id="stat-exposure">$0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">PEAK P&L</div>
+          <div class="stat-value green" id="stat-peak">$0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">DRAWDOWN</div>
+          <div class="stat-value red" id="stat-drawdown">$0</div>
+        </div>
+      </div>
+
+      <div class="panel-title" style="margin-bottom:8px">EVENT BREAKDOWN</div>
+      <div class="risk-grid" style="margin-bottom:12px">
+        <div class="risk-item">
+          <div class="risk-label">WIN RATE</div>
+          <div class="risk-val" id="ev-winrate">0%</div>
+        </div>
+        <div class="risk-item">
+          <div class="risk-label">LOSS RATE</div>
+          <div class="risk-val" id="ev-lossrate">0%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk Controls -->
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">RISK CONTROLS</span></div>
+    <div class="panel-body">
+      <div class="risk-grid">
+        <div class="risk-item">
+          <div class="risk-label">STOP LOSS USD</div>
+          <div class="risk-val">$50.00</div>
+        </div>
+        <div class="risk-item">
+          <div class="risk-label">TRAILING STOP</div>
+          <div class="risk-val">$10.00</div>
+        </div>
+        <div class="risk-item">
+          <div class="risk-label">DAILY CAP</div>
+          <div class="risk-val">$100.00</div>
+        </div>
+        <div class="risk-item risk-active">
+          <div class="risk-label">POLL INTERVAL</div>
+          <div class="risk-val" style="color:var(--green)">8s</div>
+        </div>
+      </div>
+      <div class="risk-status">
+        <div class="node-dot"></div>
+        <div class="risk-status-text">BOT ACTIVE — MONITORING</div>
+      </div>
+
+      <div style="margin-top:16px">
+        <div class="panel-title" style="margin-bottom:8px">QUICK LINKS</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <a href="https://polymarket.com/profile/0xbddf61af533ff524d27154e589d2d7a81510c684" target="_blank" class="scan-link" style="display:block">↗ Wallet 1 on Polymarket</a>
+          <a href="https://polymarket.com/profile/0x9495425feeb0c250accb89275c97587011b19a27" target="_blank" class="scan-link" style="display:block">↗ Wallet 2 on Polymarket</a>
+          <a href="https://polymarket.com/profile/0x492442eab586f242b53bda933fd5de859c8a3782" target="_blank" class="scan-link" style="display:block">↗ Wallet 3 on Polymarket</a>
+          <a href="https://polygonscan.com/address/0xbddf61af533ff524d27154e589d2d7a81510c684" target="_blank" class="scan-link" style="display:block">↗ Wallet 1 on Polygonscan</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wallet Cards -->
+  <div class="wallet-cards">
+    <div class="wallet-card" id="wcard-0">
+      <div class="wcard-header">
+        <div class="wcard-avatar" style="background:#0a2035;color:#00aaff;border:1px solid #00aaff">W1</div>
+        <div>
+          <div class="wcard-name">WALLET 1</div>
+          <div class="wcard-addr">0xbddf…684</div>
+        </div>
+      </div>
+      <div class="wcard-body" id="wbody-0"><div style="color:var(--dim);font-size:10px;text-align:center;padding:8px">Loading...</div></div>
+    </div>
+    <div class="wallet-card" id="wcard-1">
+      <div class="wcard-header">
+        <div class="wcard-avatar" style="background:#0a2010;color:#00ff88;border:1px solid #00ff88">W2</div>
+        <div>
+          <div class="wcard-name">WALLET 2</div>
+          <div class="wcard-addr">0x9495…a27</div>
+        </div>
+      </div>
+      <div class="wcard-body" id="wbody-1"><div style="color:var(--dim);font-size:10px;text-align:center;padding:8px">Loading...</div></div>
+    </div>
+    <div class="wallet-card" id="wcard-2">
+      <div class="wcard-header">
+        <div class="wcard-avatar" style="background:#1a0510;color:#ff3366;border:1px solid #ff3366">W3</div>
+        <div>
+          <div class="wcard-name">WALLET 3</div>
+          <div class="wcard-addr">0x4924…782</div>
+        </div>
+      </div>
+      <div class="wcard-body" id="wbody-2"><div style="color:var(--dim);font-size:10px;text-align:center;padding:8px">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- Trade Feed -->
+  <div class="feed-wrap">
+    <div class="feed-header">
+      <span class="feed-title">TRADE FEED — LIVE STREAM</span>
+      <div class="feed-controls">
+        <button class="feed-btn active" id="btn-all" onclick="filterFeed('all')">ALL</button>
+        <button class="feed-btn" id="btn-buy" onclick="filterFeed('buy')">BUY</button>
+        <button class="feed-btn" id="btn-sell" onclick="filterFeed('sell')">SELL</button>
+        <button class="feed-btn" onclick="clearFeed()">CLEAR</button>
+      </div>
+    </div>
+    <div class="feed-body" id="feed-body">
+      <div class="empty-feed">⟳ STREAMING — กำลังดึงข้อมูล trades...</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="bottom-bar">
+  <div class="node-info">
+    <div class="node-dot"></div>
+    <span>NODE: POLYGON MAINNET (137)</span>
+    <span>|</span>
+    <span>TARGETS: 3 WALLETS</span>
+    <span>|</span>
+    <span>POLL: 8s</span>
+    <span>|</span>
+    <span style="color:var(--green)">● BOT RUNNING</span>
+  </div>
+  <div class="clock" id="clock">--:--:--</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const WALLETS = [
+  {addr:'0xbddf61af533ff524d27154e589d2d7a81510c684',name:'Wallet 1',color:'#00aaff'},
+  {addr:'0x9495425feeb0c250accb89275c97587011b19a27',name:'Wallet 2',color:'#00ff88'},
+  {addr:'0x492442eab586f242b53bda933fd5de859c8a3782',name:'Wallet 3',color:'#ff3366'},
+];
+const DATA_API='https://data-api.polymarket.com';
+const CLOB_API='https://clob.polymarket.com';
+
+let allTrades=[];
+let seenTrades=new Set();
+let feedFilter='all';
+let pnlHistory=[];
+let chartInst=null;
+let totalPnL=0;
+let peakPnL=0;
+
+function fmt(n){const s=parseFloat(n||0);return (s>=0?'+':'')+s.toFixed(2)}
+function fmtUSD(n){const s=parseFloat(n||0);return '$'+Math.abs(s).toFixed(2)}
+function shortAddr(a){return a.slice(0,6)+'…'+a.slice(-4)}
+function timeStr(ts){
+  if(!ts)return'--:--:--';
+  const d=new Date(ts*1000);
+  return d.toLocaleTimeString('en-GB');
+}
+function relTime(ts){
+  if(!ts)return'';
+  const diff=Math.floor((Date.now()-ts*1000)/1000);
+  if(diff<60)return diff+'s ago';
+  if(diff<3600)return Math.floor(diff/60)+'m ago';
+  return Math.floor(diff/3600)+'h ago';
+}
+
+function initChart(){
+  const ctx=document.getElementById('pnlChart').getContext('2d');
+  chartInst=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:[],
+      datasets:[{
+        data:[],
+        borderColor:'#00ff88',
+        backgroundColor:'rgba(0,255,136,0.05)',
+        fill:true,
+        tension:0.4,
+        pointRadius:0,
+        borderWidth:1.5,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{
+        x:{display:false},
+        y:{
+          display:true,
+          grid:{color:'rgba(26,58,92,0.4)'},
+          ticks:{color:'#4a7a9b',font:{size:9},callback:v=>'$'+v.toFixed(0)},
+        }
+      },
+      animation:{duration:300}
+    }
+  });
+}
+
+function updateChart(){
+  if(!chartInst)return;
+  const now=new Date().toLocaleTimeString('en-GB');
+  pnlHistory.push({t:now,v:totalPnL});
+  if(pnlHistory.length>30)pnlHistory.shift();
+  chartInst.data.labels=pnlHistory.map(p=>p.t);
+  chartInst.data.datasets[0].data=pnlHistory.map(p=>p.v);
+  chartInst.data.datasets[0].borderColor=totalPnL>=0?'#00ff88':'#ff3366';
+  chartInst.data.datasets[0].backgroundColor=totalPnL>=0?'rgba(0,255,136,0.05)':'rgba(255,51,102,0.05)';
+  chartInst.update('none');
+}
+
+function renderWalletBody(idx,positions,pnl){
+  const el=document.getElementById('wbody-'+idx);
+  const trades=parseInt(pnl?.totalTrades||0);
+  const winRate=parseFloat(pnl?.winRate||0)*100;
+  const pnlAll=parseFloat(pnl?.pnlAllTime||0);
+  const pnl24=parseFloat(pnl?.pnl24h||0);
+  const pnlColor=pnlAll>=0?'green':'red';
+  const p24Color=pnl24>=0?'green':'red';
+  el.innerHTML=`
+    <div class="wcard-row"><span class="wcard-label">ALL-TIME P&L</span><span class="wcard-val ${pnlColor}">${fmt(pnlAll)}</span></div>
+    <div class="wcard-row"><span class="wcard-label">24H P&L</span><span class="wcard-val ${p24Color}">${fmt(pnl24)}</span></div>
+    <div class="wcard-row"><span class="wcard-label">WIN RATE</span><span class="wcard-val yellow">${winRate.toFixed(1)}%</span></div>
+    <div class="wcard-row"><span class="wcard-label">TOTAL TRADES</span><span class="wcard-val blue">${trades}</span></div>
+    <div class="wcard-row"><span class="wcard-label">OPEN POSITIONS</span><span class="wcard-val">${positions.length}</span></div>
+  `;
+}
+
+function addTradeToFeed(trade,walletName,walletColor){
+  const id=trade.id||trade.transactionHash||(trade.maker+trade.timestamp);
+  if(seenTrades.has(id))return;
+  seenTrades.add(id);
+  allTrades.unshift({...trade,walletName,walletColor,_id:id});
+  if(allTrades.length>100)allTrades.pop();
+  renderFeed();
+}
+
+function renderFeed(){
+  const feed=document.getElementById('feed-body');
+  let filtered=allTrades;
+  if(feedFilter==='buy')filtered=allTrades.filter(t=>(t.side||'').toUpperCase()==='BUY');
+  if(feedFilter==='sell')filtered=allTrades.filter(t=>(t.side||'').toUpperCase()==='SELL');
+  if(!filtered.length){
+    feed.innerHTML='<div class="empty-feed">⟳ กำลัง STREAM — ยังไม่มี trades ใหม่...</div>';
+    return;
+  }
+  feed.innerHTML=filtered.slice(0,30).map(t=>{
+    const side=(t.side||'BUY').toUpperCase();
+    const isBuy=side==='BUY';
+    const price=parseFloat(t.price||0);
+    const size=parseFloat(t.size||0);
+    const total=(price*size).toFixed(2);
+    const market=t.market||t.title||t.slug||'Unknown Market';
+    return `
+      <div class="trade-row">
+        <div class="trade-time">${timeStr(t.timestamp)}</div>
+        <div class="trade-type ${isBuy?'buy':'sell'}">${isBuy?'BUY YES':'SELL'}</div>
+        <div style="flex:1;min-width:0">
+          <div class="trade-market">${market.slice(0,90)}${market.length>90?'…':''}</div>
+          <div class="trade-wallet" style="color:${t.walletColor}">${t.walletName} · ${relTime(t.timestamp)}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="trade-amount">$${total}</div>
+          <div class="trade-price">@ ${(price*100).toFixed(1)}%</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterFeed(f){
+  feedFilter=f;
+  ['all','buy','sell'].forEach(x=>document.getElementById('btn-'+x)?.classList.remove('active'));
+  document.getElementById('btn-'+f)?.classList.add('active');
+  renderFeed();
+}
+
+function clearFeed(){allTrades=[];seenTrades.clear();renderFeed();}
+
+async function fetchAll(){
+  let totalPositions=0;
+  let totalTradeCount=0;
+  let totalWins=0;
+  let sumPnL=0;
+  let sumExposure=0;
+
+  for(let i=0;i<WALLETS.length;i++){
+    const w=WALLETS[i];
+    try{
+      const [posRes,tradeRes,pnlRes]=await Promise.all([
+        fetch(`${DATA_API}/positions?user=${w.addr.toLowerCase()}&sizeThreshold=0`).then(r=>r.ok?r.json():[]),
+        fetch(`${CLOB_API}/trades?maker=${w.addr.toLowerCase()}&limit=10`).then(r=>r.ok?r.json():{data:[]}),
+        fetch(`${DATA_API}/portfolio?user=${w.addr.toLowerCase()}`).then(r=>r.ok?r.json():null),
+      ]);
+
+      const positions=Array.isArray(posRes)?posRes:[];
+      const trades=tradeRes?.data||[];
+      const pnl=pnlRes;
+
+      renderWalletBody(i,positions,pnl);
+      totalPositions+=positions.length;
+
+      const tc=parseInt(pnl?.totalTrades||0);
+      const wr=parseFloat(pnl?.winRate||0);
+      totalTradeCount+=tc;
+      totalWins+=Math.round(tc*wr);
+      sumPnL+=parseFloat(pnl?.pnlAllTime||0);
+
+      for(const pos of positions){
+        sumExposure+=parseFloat(pos.size||0)*parseFloat(pos.curPrice||0);
+      }
+
+      for(const t of trades){
+        addTradeToFeed(t,w.name,w.color);
+      }
+    }catch(e){}
+  }
+
+  totalPnL=sumPnL;
+  if(totalPnL>peakPnL)peakPnL=totalPnL;
+  const drawdown=peakPnL-totalPnL;
+
+  const pnlEl=document.getElementById('total-pnl');
+  pnlEl.textContent=(totalPnL>=0?'+':'')+'$'+Math.abs(totalPnL).toFixed(2);
+  pnlEl.className='stat-value '+(totalPnL>=0?'green':'red');
+
+  document.getElementById('total-positions').textContent=totalPositions;
+  document.getElementById('total-trades').textContent=totalTradeCount;
+
+  const wr=totalTradeCount>0?(totalWins/totalTradeCount*100):0;
+  document.getElementById('win-rate-val').textContent=wr.toFixed(0)+'%';
+  document.getElementById('win-rate-val').className='stat-value '+(wr>=50?'green':'red');
+  document.getElementById('win-rate-display').textContent=totalWins+' WIN / '+totalTradeCount+' ALL';
+
+  document.getElementById('stat-copied').textContent=allTrades.length;
+  document.getElementById('stat-wins').textContent=totalWins;
+  document.getElementById('stat-losses').textContent=totalTradeCount-totalWins;
+  document.getElementById('stat-exposure').textContent='$'+sumExposure.toFixed(0);
+  document.getElementById('stat-peak').textContent='$'+peakPnL.toFixed(2);
+  document.getElementById('stat-drawdown').textContent='-$'+drawdown.toFixed(2);
+  document.getElementById('ev-winrate').textContent=wr.toFixed(0)+'%';
+  document.getElementById('ev-lossrate').textContent=(100-wr).toFixed(0)+'%';
+
+  const now=new Date().toLocaleTimeString('en-GB');
+  document.getElementById('update-indicator').textContent='UPDATED '+now;
+  updateChart();
+}
+
+function updateClock(){
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB');
+}
+
+initChart();
+fetchAll();
+setInterval(fetchAll,8000);
+setInterval(updateClock,1000);
+updateClock();
+</script>
+</body>
+</html>
