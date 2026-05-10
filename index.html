@@ -296,33 +296,39 @@ const W=[
   {a:'0xee613b3fc183ee44f9da9c05f53e2da107e3debf',n:'W6',full:'Wallet 6',c:'#ff8800'},
 ];
 
-// Multiple CORS proxies with fallback
-const PROXIES=[
-  'https://corsproxy.io/?url=',
-  'https://api.allorigins.win/raw?url=',
-  'https://thingproxy.freeboard.io/fetch/',
-];
+// VPS API via Nginx (port 80 - no Mixed Content issue)
+const VPS_API='http://187.127.117.205/api';
+const PROXIES=['https://corsproxy.io/?url=','https://api.allorigins.win/raw?url='];
 let pi=0;
 
 async function apiFetch(url,timeout=12000){
-  // Convert Polymarket API URL to VPS API URL
-  let vpsUrl = url;
+  // Try VPS Nginx proxy first
+  let vpsUrl=null;
   if(url.includes('data-api.polymarket.com/positions')){
     const u=new URL(url);
     vpsUrl=VPS_API+'/positions?user='+u.searchParams.get('user');
-  } else if(url.includes('data-api.polymarket.com/portfolio')){
+  }else if(url.includes('data-api.polymarket.com/portfolio')){
     const u=new URL(url);
     vpsUrl=VPS_API+'/portfolio?user='+u.searchParams.get('user');
-  } else if(url.includes('clob.polymarket.com/trades')){
+  }else if(url.includes('clob.polymarket.com/trades')){
     const u=new URL(url);
     vpsUrl=VPS_API+'/trades?maker='+u.searchParams.get('maker');
-  } else if(url.includes('gamma-api.polymarket.com/markets')){
+  }else if(url.includes('gamma-api.polymarket.com/markets')){
     vpsUrl=VPS_API+'/markets';
   }
-  try{
-    const r=await fetch(vpsUrl,{signal:AbortSignal.timeout(timeout),headers:{'Accept':'application/json'}});
-    if(r.ok) return await r.json();
-  }catch(e){}
+  if(vpsUrl){
+    try{
+      const r=await fetch(vpsUrl,{signal:AbortSignal.timeout(timeout),headers:{'Accept':'application/json'}});
+      if(r.ok){const d=await r.json();return d;}
+    }catch(e){}
+  }
+  // Fallback: CORS proxy
+  for(let i=0;i<PROXIES.length;i++){
+    try{
+      const r=await fetch(PROXIES[(pi+i)%PROXIES.length]+encodeURIComponent(url),{signal:AbortSignal.timeout(timeout)});
+      if(r.ok){pi=(pi+i)%PROXIES.length;return await r.json();}
+    }catch(e){}
+  }
   return null;
 }
 
