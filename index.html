@@ -305,29 +305,23 @@ const PROXIES=[
 let pi=0;
 
 async function apiFetch(url,timeout=12000){
-  // Try each proxy
-  for(let i=0;i<PROXIES.length;i++){
-    const idx=(pi+i)%PROXIES.length;
-    try{
-      const r=await fetch(PROXIES[idx]+encodeURIComponent(url),{
-        signal:AbortSignal.timeout(timeout),
-        headers:{'Accept':'application/json'}
-      });
-      if(r.ok){
-        const text=await r.text();
-        // Validate it's actual JSON, not an error page
-        const trimmed=text.trim();
-        if(trimmed.startsWith('[')||trimmed.startsWith('{')){
-          pi=idx;
-          return JSON.parse(trimmed);
-        }
-      }
-    }catch(e){}
+  // Convert Polymarket API URL to VPS API URL
+  let vpsUrl = url;
+  if(url.includes('data-api.polymarket.com/positions')){
+    const u=new URL(url);
+    vpsUrl=VPS_API+'/positions?user='+u.searchParams.get('user');
+  } else if(url.includes('data-api.polymarket.com/portfolio')){
+    const u=new URL(url);
+    vpsUrl=VPS_API+'/portfolio?user='+u.searchParams.get('user');
+  } else if(url.includes('clob.polymarket.com/trades')){
+    const u=new URL(url);
+    vpsUrl=VPS_API+'/trades?maker='+u.searchParams.get('maker');
+  } else if(url.includes('gamma-api.polymarket.com/markets')){
+    vpsUrl=VPS_API+'/markets';
   }
-  // Try direct (may work in some browsers)
   try{
-    const r=await fetch(url,{signal:AbortSignal.timeout(8000),mode:'cors'});
-    if(r.ok)return await r.json();
+    const r=await fetch(vpsUrl,{signal:AbortSignal.timeout(timeout),headers:{'Accept':'application/json'}});
+    if(r.ok) return await r.json();
   }catch(e){}
   return null;
 }
