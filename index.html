@@ -517,31 +517,36 @@ function sf(f){flt=f;['all','buy','sell'].forEach(x=>{const b=document.getElemen
 function ca(){trades=[];seen.clear();rFeed();}
 
 async function fetchWallet(i){
-  const w=W[i];
   setBadge(i,'loading');
-  try{
-    const [posData,tradeData,pnlData]=await Promise.all([
-      apiFetch('https://data-api.polymarket.com/positions?user='+w.a+'&sizeThreshold=0',10000),
-      apiFetch('https://clob.polymarket.com/trades?maker='+w.a+'&limit=15',10000),
-      apiFetch('https://data-api.polymarket.com/portfolio?user='+w.a,10000),
-    ]);
-    const pos=validatePositions(posData);
-    const pnl=validatePortfolio(pnlData);
-    const trades_data=Array.isArray(tradeData?.data)?tradeData.data:[];
-    const hasData=!!(pos!==null||pnl!==null);
-    rWcard(i,pos||[],pnl,hasData);
-    let newT=0;
-    for(const t of trades_data){if(addT(t,w.full,w.c))newT++;}
-    if(newT>0)rFeed();
-    return{pos:pos||[],pnl,ok:hasData};
-  }catch(e){
-    rWcard(i,[],null,false);
-    return{pos:[],pnl:null,ok:false};
-  }
+  return{pos:[],pnl:null,ok:false};
 }
 
 async function refresh(){
-  const results=await Promise.all(W.map((_,i)=>fetchWallet(i)));
+  // Use batch API - 1 request for all 6 wallets
+  const addrs=W.map(w=>'users='+w.a).join('&');
+  let batchData={};
+  try{
+    const r=await fetch(VPS_API+'/batch?'+addrs,{signal:AbortSignal.timeout(45000),headers:{'Accept':'application/json'}});
+    if(r.ok) batchData=await r.json();
+  }catch(e){}
+
+  const results=W.map((_,i)=>({pos:[],pnl:null,ok:false}));
+  W.forEach((w,i)=>{
+    const d=batchData[w.a];
+    if(d){
+      const pos=validatePositions(d.positions);
+      const pnl=validatePortfolio(d.portfolio);
+      const trades_data=Array.isArray(d.trades)?d.trades:[];
+      const hasData=!!(pos!==null||pnl!==null||trades_data.length>0);
+      rWcard(i,pos||[],pnl,hasData);
+      let newT=0;
+      for(const t of trades_data){if(addT(t,w.full,w.c))newT++;}
+      if(newT>0)rFeed();
+      results[i]={pos:pos||[],pnl,ok:hasData};
+    }else{
+      rWcard(i,[],null,false);
+    }
+  });
   let sp=0,spos=0,str=0,swn=0,sexp=0,okCount=0;
   results.forEach(r=>{
     if(r.ok)okCount++;
