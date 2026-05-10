@@ -296,41 +296,38 @@ const W=[
   {a:'0xee613b3fc183ee44f9da9c05f53e2da107e3debf',n:'W6',full:'Wallet 6',c:'#ff8800'},
 ];
 
-// VPS API via Nginx (port 80 - no Mixed Content issue)
-const VPS_API='https://montreal-conduct-vat-costa.trycloudflare.com/api';
-const PROXIES=['https://corsproxy.io/?url=','https://api.allorigins.win/raw?url='];
+// CORS Proxies - rotate to avoid rate limits
+const PROXIES=[
+  'https://corsproxy.io/?url=',
+  'https://api.allorigins.win/raw?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+];
 let pi=0;
 
-async function apiFetch(url,timeout=12000){
-  // Try VPS Nginx proxy first
-  let vpsUrl=null;
-  if(url.includes('data-api.polymarket.com/positions')){
-    const u=new URL(url);
-    vpsUrl=VPS_API+'/positions?user='+u.searchParams.get('user');
-  }else if(url.includes('data-api.polymarket.com/portfolio')){
-    const u=new URL(url);
-    vpsUrl=VPS_API+'/portfolio?user='+u.searchParams.get('user');
-  }else if(url.includes('clob.polymarket.com/trades')){
-    const u=new URL(url);
-    vpsUrl=VPS_API+'/trades?maker='+u.searchParams.get('maker');
-  }else if(url.includes('gamma-api.polymarket.com/markets')){
-    vpsUrl=VPS_API+'/markets';
-  }
-  if(vpsUrl){
-    try{
-      const r=await fetch(vpsUrl,{signal:AbortSignal.timeout(timeout),headers:{'Accept':'application/json'}});
-      if(r.ok){const d=await r.json();return d;}
-    }catch(e){}
-  }
-  // Fallback: CORS proxy
+async function apiFetch(url,timeout=15000){
   for(let i=0;i<PROXIES.length;i++){
+    const idx=(pi+i)%PROXIES.length;
     try{
-      const r=await fetch(PROXIES[(pi+i)%PROXIES.length]+encodeURIComponent(url),{signal:AbortSignal.timeout(timeout)});
-      if(r.ok){pi=(pi+i)%PROXIES.length;return await r.json();}
+      const proxyUrl=PROXIES[idx]+encodeURIComponent(url);
+      const r=await fetch(proxyUrl,{
+        signal:AbortSignal.timeout(timeout),
+        headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}
+      });
+      if(r.ok){
+        const text=await r.text();
+        const trimmed=text.trim();
+        if(trimmed.startsWith('[')||trimmed.startsWith('{')){
+          pi=idx;
+          return JSON.parse(trimmed);
+        }
+      }
     }catch(e){}
+    await sleep(200);
   }
   return null;
 }
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 // Validate position data — filter out garbage
 function validatePositions(data){
@@ -517,36 +514,37 @@ function sf(f){flt=f;['all','buy','sell'].forEach(x=>{const b=document.getElemen
 function ca(){trades=[];seen.clear();rFeed();}
 
 async function fetchWallet(i){
+  const w=W[i];
   setBadge(i,'loading');
-  return{pos:[],pnl:null,ok:false};
+  try{
+    const [posData,tradeData,pnlData]=await Promise.all([
+      apiFetch('https://data-api.polymarket.com/positions?user='+w.a+'&sizeThreshold=0',15000),
+      apiFetch('https://clob.polymarket.com/trades?maker='+w.a+'&limit=15',15000),
+      apiFetch('https://data-api.polymarket.com/portfolio?user='+w.a,15000),
+    ]);
+    const pos=validatePositions(posData);
+    const pnl=validatePortfolio(pnlData);
+    const trades_data=Array.isArray(tradeData?.data)?tradeData.data:[];
+    const hasData=!!(pos!==null||pnl!==null);
+    rWcard(i,pos||[],pnl,hasData);
+    let newT=0;
+    for(const t of trades_data){if(addT(t,w.full,w.c))newT++;}
+    if(newT>0)rFeed();
+    return{pos:pos||[],pnl,ok:hasData};
+  }catch(e){
+    rWcard(i,[],null,false);
+    return{pos:[],pnl:null,ok:false};
+  }
 }
 
 async function refresh(){
-  // Use batch API - 1 request for all 6 wallets
-  const addrs=W.map(w=>'users='+w.a).join('&');
-  let batchData={};
-  try{
-    const r=await fetch(VPS_API+'/batch?'+addrs,{signal:AbortSignal.timeout(45000),headers:{'Accept':'application/json'}});
-    if(r.ok) batchData=await r.json();
-  }catch(e){}
-
-  const results=W.map((_,i)=>({pos:[],pnl:null,ok:false}));
-  W.forEach((w,i)=>{
-    const d=batchData[w.a];
-    if(d){
-      const pos=validatePositions(d.positions);
-      const pnl=validatePortfolio(d.portfolio);
-      const trades_data=Array.isArray(d.trades)?d.trades:[];
-      const hasData=!!(pos!==null||pnl!==null||trades_data.length>0);
-      rWcard(i,pos||[],pnl,hasData);
-      let newT=0;
-      for(const t of trades_data){if(addT(t,w.full,w.c))newT++;}
-      if(newT>0)rFeed();
-      results[i]={pos:pos||[],pnl,ok:hasData};
-    }else{
-      rWcard(i,[],null,false);
-    }
-  });
+  // Sequential fetch with delay to avoid rate limits
+  const results=[];
+  for(let i=0;i<W.length;i++){
+    const r=await fetchWallet(i);
+    results.push(r);
+    if(i<W.length-1) await sleep(800); // 800ms between wallets
+  }
   let sp=0,spos=0,str=0,swn=0,sexp=0,okCount=0;
   results.forEach(r=>{
     if(r.ok)okCount++;
